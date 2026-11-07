@@ -11,17 +11,15 @@ namespace LoneRetr0.NeonAsteroids
         public bool Expired => life <= 0f;
 
         float life;
+        TrailRenderer trail;
 
-        public static Bullet Create(Transform parent, Vector3 position, Vector2 direction,
-                                    Vector2 inheritVelocity, float speed, float lifeTime)
+        public static Bullet Create(Transform parent)
         {
             var go = new GameObject("Bullet");
+            go.SetActive(false);
             go.transform.SetParent(parent, false);
-            go.transform.SetPositionAndRotation(position, Quaternion.LookRotation(Vector3.forward, direction));
 
             var b = go.AddComponent<Bullet>();
-            b.Velocity = direction.normalized * speed + inheritVelocity;
-            b.life = lifeTime;
 
             NeonFactory.CreateLine(go.transform, "Core",
                 new[] { new Vector3(0f, -0.15f, 0f), new Vector3(0f, 0.15f, 0f) },
@@ -44,7 +42,17 @@ namespace LoneRetr0.NeonAsteroids
             trail.receiveShadows = false;
 
             go.AddComponent<ScreenWrapper>().margin = 0.1f;
+            b.trail = trail;
             return b;
+        }
+
+        public void Launch(Vector3 position, Vector2 direction, Vector2 inheritVelocity, float speed, float lifeTime)
+        {
+            transform.SetPositionAndRotation(position, Quaternion.LookRotation(Vector3.forward, direction));
+            Velocity = direction.normalized * speed + inheritVelocity;
+            life = lifeTime;
+            trail.Clear();
+            gameObject.SetActive(true);
         }
 
         void Update()

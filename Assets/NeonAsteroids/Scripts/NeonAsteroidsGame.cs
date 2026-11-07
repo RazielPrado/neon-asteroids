@@ -41,12 +41,18 @@ namespace LoneRetr0.NeonAsteroids
         [Header("Mobile")]
         [SerializeField] Font touchControlsFont;
         [SerializeField] bool forceMobileControls;
+        [SerializeField, Range(0.5f, 1f)] float mobileRenderScale = 0.8f;
+        [SerializeField] int mobileGameplayFps = 60;
+        [SerializeField] int mobileMenuFps = 30;
 
         const string MobileControlsHelp =
             "<color=#FFD84D>LEFT</color> AIM & THRUST     <color=#FFD84D>RIGHT</color> FIRE     " +
             "<color=#FFD84D>HYPER</color> JUMP     <color=#FFD84D>II</color> PAUSE";
 
         bool isMobile;
+        bool powerModeSet, highPowerMode;
+        UniversalRenderPipelineAsset scaledPipeline;
+        float originalRenderScale = 1f;
 
         public static Vector2 HalfExtents { get; private set; } = new Vector2(17.8f, 10f);
 
@@ -54,6 +60,7 @@ namespace LoneRetr0.NeonAsteroids
 
         readonly List<Asteroid> asteroids = new List<Asteroid>();
         readonly List<Bullet> bullets = new List<Bullet>();
+        readonly Stack<Bullet> bulletPool = new Stack<Bullet>();
 
         Camera cam;
         Transform world, background;
@@ -120,6 +127,8 @@ namespace LoneRetr0.NeonAsteroids
             player.Init(this);
             player.gameObject.SetActive(false);
 
+            for (int i = 0; i < maxBullets; i++) bulletPool.Push(Bullet.Create(world));
+
             highScore = PlayerPrefs.GetInt(HighScoreKey, 0);
             EnterTitle();
         }
@@ -182,6 +191,7 @@ namespace LoneRetr0.NeonAsteroids
             UpdateBounds();
             ui.Tick(Time.unscaledDeltaTime);
             MobileControls.GameplayVisible = state == State.Playing || state == State.Dead;
+            if (isMobile) UpdatePowerMode();
 
             if (state == State.Paused)
             {
@@ -328,8 +338,6 @@ namespace LoneRetr0.NeonAsteroids
 
         void SetupMobile()
         {
-            Application.targetFrameRate = 60;
-            Screen.sleepTimeout = SleepTimeout.NeverSleep;
             Screen.autorotateToPortrait = false;
             Screen.autorotateToPortraitUpsideDown = false;
             Screen.autorotateToLandscapeLeft = true;
@@ -340,6 +348,26 @@ namespace LoneRetr0.NeonAsteroids
             if (controls == null) controls = gameObject.AddComponent<MobileControls>();
             controls.Init(touchControlsFont);
             ui.SetControlsHelp(MobileControlsHelp);
+
+            fx.UseMobileQuality();
+
+            if (Application.isMobilePlatform && GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
+            {
+                scaledPipeline = urp;
+                originalRenderScale = urp.renderScale;
+                urp.renderScale = mobileRenderScale;
+            }
+        }
+
+        void UpdatePowerMode()
+        {
+            bool active = state == State.Playing || state == State.Dead;
+            if (powerModeSet && active == highPowerMode) return;
+
+            powerModeSet = true;
+            highPowerMode = active;
+            Application.targetFrameRate = active ? mobileGameplayFps : mobileMenuFps;
+            Screen.sleepTimeout = active ? SleepTimeout.NeverSleep : SleepTimeout.SystemSetting;
         }
 
         void OnApplicationPause(bool isPaused)
@@ -475,7 +503,9 @@ namespace LoneRetr0.NeonAsteroids
         {
             if (bullets.Count >= maxBullets) return false;
 
-            bullets.Add(Bullet.Create(world, position, direction, shipVelocity, speed, life));
+            var bullet = bulletPool.Count > 0 ? bulletPool.Pop() : Bullet.Create(world);
+            bullet.Launch(position, direction, shipVelocity, speed, life);
+            bullets.Add(bullet);
             NeonDebris.Burst(position, NeonPalette.Yellow, 3, 3f, 0.12f, 0.15f);
             fx.Kick(0.02f, 0.1f, 0.03f);
             sfx.PlayShoot();
@@ -647,14 +677,21 @@ namespace LoneRetr0.NeonAsteroids
 
         void DestroyBullet(int index)
         {
-            Destroy(bullets[index].gameObject);
+            ReleaseBullet(bullets[index]);
             bullets.RemoveAt(index);
+        }
+
+        void ReleaseBullet(Bullet bullet)
+        {
+            if (bullet == null) return;
+            bullet.gameObject.SetActive(false);
+            bulletPool.Push(bullet);
         }
 
         void ClearWorld()
         {
             foreach (var a in asteroids) if (a != null) Destroy(a.gameObject);
-            foreach (var b in bullets) if (b != null) Destroy(b.gameObject);
+            foreach (var b in bullets) ReleaseBullet(b);
             asteroids.Clear();
             bullets.Clear();
         }
@@ -662,6 +699,7 @@ namespace LoneRetr0.NeonAsteroids
         void OnDestroy()
         {
             Time.timeScale = 1f;
+            if (scaledPipeline != null) scaledPipeline.renderScale = originalRenderScale;
             if (backgroundMaterial != null) Destroy(backgroundMaterial);
             if (NeonFactory.LineMaterial != null) Destroy(NeonFactory.LineMaterial);
         }

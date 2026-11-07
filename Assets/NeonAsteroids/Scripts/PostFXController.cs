@@ -61,6 +61,11 @@ namespace LoneRetr0.NeonAsteroids
             volume.sharedProfile = profile;
         }
 
+        public void UseMobileQuality()
+        {
+            if (bloom != null) bloom.highQualityFiltering.Override(false);
+        }
+
         public void Kick(float chromaAmount, float bloomAmount, float shakeAmount, float glitchAmount = 0f)
         {
             chromaKick = Mathf.Max(chromaKick, chromaAmount);
