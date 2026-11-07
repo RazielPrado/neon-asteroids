@@ -1,0 +1,6 @@
+*.mat linguist-detectable=false
+*.asset linguist-detectable=false
+*.unity linguist-detectable=false
+*.prefab linguist-detectable=false
+Assets/TextMesh[[:space:]]Pro/** linguist-vendored
+Assets/TutorialInfo/** linguist-vendored
